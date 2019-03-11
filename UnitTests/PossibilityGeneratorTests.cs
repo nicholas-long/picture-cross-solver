@@ -15,7 +15,7 @@ namespace UnitTests
 		public void TestPossibilities_4_5()
 		{
 			RowPossibilityGenerator gen = new RowPossibilityGenerator();
-			var results = gen.Generate(new List<int>() { 4 }, 5);
+			var results = gen.GenerateAll(new List<int>() { 4 }, 5);
 			Assert.AreEqual(results.Count(), 2);
 			Assert.IsTrue(results.All(r => r.Length == 5));
 			Assert.IsTrue(results.All(r => r.ElementAt(1).BoolValue && r.ElementAt(2).BoolValue && r.ElementAt(3).BoolValue));

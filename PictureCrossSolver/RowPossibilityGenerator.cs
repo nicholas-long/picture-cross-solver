@@ -8,60 +8,47 @@ namespace PictureCrossSolver
 {
 	public class RowPossibilityGenerator
 	{
-		public List<SolvingBooleanSet[]> Generate(IEnumerable<int> groupSizes, int rowLength)
+		public List<SolvingBooleanSet[]> GenerateAll(IEnumerable<int> groupSizes, int rowLength)
 		{
-			// all of the groups plus at least one spacer between them should be less than the row length
-			if (outOfBounds(groupSizes, rowLength))
+			if (OutOfBounds(groupSizes, rowLength))
 			{
 				throw new InvalidOperationException("Not enough space for this combination");
 			}
 
-			//
 			List<SolvingBooleanSet[]> results = new List<SolvingBooleanSet[]>();
-			generateRec(ImmutableQueue.CreateRange(groupSizes), ImmutableList<SolvingBooleanSet>.Empty, rowLength, results);
+			GenerateRec(ImmutableQueue.CreateRange(groupSizes), ImmutableList<SolvingBooleanSet>.Empty, rowLength, results);
+			return results;
+		}
+
+		public List<SolvingBooleanSet[]> Generate(IEnumerable<int> groupSizes, SolvingBooleanSet[] knownData)
+		{
+			if (OutOfBounds(groupSizes, knownData.Length))
+			{
+				throw new InvalidOperationException("Not enough space for this combination");
+			}
+
+			List<SolvingBooleanSet[]> results = new List<SolvingBooleanSet[]>();
+			GenerateIncludingKnownDataRec(knownData, ImmutableQueue.CreateRange(groupSizes), ImmutableList<SolvingBooleanSet>.Empty, 0, results);
 			return results;
 		}
 
 		public SolvingBooleanSet[] Intersection(IEnumerable<int> groupSizes, int rowLength)
 		{
-			IEnumerable<SolvingBooleanSet[]> results = Generate(groupSizes, rowLength);
+			IEnumerable<SolvingBooleanSet[]> results = GenerateAll(groupSizes, rowLength);
 			SolvingBooleanSet[] arr = Enumerable.Range(1, rowLength).Select(x => SolvingBooleanSet.Impossible).ToArray();
-			intersect(results, arr);
-			//foreach (var row in results)
-			//{
-			//	for (int index = 0; index < rowLength; index++)
-			//	{
-			//		arr[index].Add(row.ElementAt(index));
-			//	}
-			//}
+			Intersect(results, arr);
 			return arr;
 		}
 
-		//TODO: rewrite this.  this is way too inefficient.
 		public SolvingBooleanSet[] Constrain(IEnumerable<int> groupSizes, SolvingBooleanSet[] initial)
 		{
-			var allResults = Generate(groupSizes, initial.Length); // take all the possibilities
-
-			var filtered = allResults.Where(r => fits(r, initial)); // remove ones that don't fit with what we know
-
-			// do intersection of filtered values
-			SolvingBooleanSet[] ret = initial.ToList().Select(v => v.IsDefined ? v : SolvingBooleanSet.Impossible).ToArray();			intersect(filtered, ret);
-			intersect(filtered, ret);
-
+			var allResults = Generate(groupSizes, initial);
+			SolvingBooleanSet[] ret = initial.ToList().Select(v => v.IsDefined ? v : SolvingBooleanSet.Impossible).ToArray();
+			Intersect(allResults, ret);
 			return ret;
 		}
 
-		private bool fits(SolvingBooleanSet[] query, SolvingBooleanSet[] known)
-		{
-			for (int index = 0; index < known.Length; index++)
-			{
-				if (known[index].IsDefined && !query[index].IsDefined) return false;
-				if (known[index].IsDefined && query[index].Values != known[index].Values) return false;
-			}
-			return true;
-		}
-
-		private void intersect(IEnumerable<SolvingBooleanSet[]> combinations, SolvingBooleanSet[] arr)
+		private void Intersect(IEnumerable<SolvingBooleanSet[]> combinations, SolvingBooleanSet[] arr)
 		{
 			foreach (var row in combinations)
 			{
@@ -72,9 +59,9 @@ namespace PictureCrossSolver
 			}
 		}
 
-		private void generateRec(ImmutableQueue<int> groupSizes, ImmutableList<SolvingBooleanSet> formerProgress, int remaining, List<SolvingBooleanSet[]> output)
+		private void GenerateRec(ImmutableQueue<int> groupSizes, ImmutableList<SolvingBooleanSet> formerProgress, int remaining, List<SolvingBooleanSet[]> output)
 		{
-			if (outOfBounds(groupSizes, remaining)) return;
+			if (OutOfBounds(groupSizes, remaining)) return;
 
 			// base case: all groups are generated
 			if (groupSizes.IsEmpty)
@@ -104,21 +91,87 @@ namespace PictureCrossSolver
 				if (remaining - group > 0)
 				{
 					nextProgress = nextProgress.Add(SolvingBooleanSet.FalseOnly); // add spacer
-					generateRec(nextGroupSizes, nextProgress, (remaining - group) - 1, output);
+					GenerateRec(nextGroupSizes, nextProgress, (remaining - group) - 1, output);
 				}
 				else
 				{
-					generateRec(nextGroupSizes, nextProgress, 0, output);
+					GenerateRec(nextGroupSizes, nextProgress, 0, output);
 				}
 			}
 
 			// don't take a group and append an empty box
 			var next = formerProgress.Add(SolvingBooleanSet.FalseOnly);
-			generateRec(groupSizes, next, remaining - 1, output);
+			GenerateRec(groupSizes, next, remaining - 1, output);
 		}
 
-		private bool outOfBounds(IEnumerable<int> groupSizes, int remainingLength)
+		private void GenerateIncludingKnownDataRec(SolvingBooleanSet[] known, ImmutableQueue<int> groupSizes, ImmutableList<SolvingBooleanSet> formerProgress, int index, List<SolvingBooleanSet[]> output)
 		{
+			if (OutOfBounds(groupSizes, known.Length - index)) return;
+			if (index > known.Length) throw new InvalidOperationException();
+
+			// base case - all groups are done so finish off the rest of the row with empty cells
+			if (groupSizes.IsEmpty)
+			{
+				while (index < known.Length)
+				{
+					if (known[index].Values != SolveBool.True)
+					{
+						formerProgress = formerProgress.Add(SolvingBooleanSet.FalseOnly);
+						index++;
+					}
+					else
+					{
+						// if we found a cell that can only be true, but all groups are gone, then this failed
+						return; // break early
+					}
+				}
+				output.Add(formerProgress.ToArray());
+				return;
+			}
+
+			// take two paths: add a group and don't add a group, but fail if a contradictory cell is found
+			// path 1: add a group if there is not a cell known to be empty
+			if (known[index].Values != SolveBool.False)
+			{
+				int group = groupSizes.Peek();
+				var nextGroupSizes = groupSizes.Dequeue();
+				int nextIndex = index, end = index + group;
+				var nextProgress = formerProgress;
+				bool canAdd = true;
+				while (nextIndex < end)
+				{
+					if (known[nextIndex].Values == SolveBool.False)
+					{
+						canAdd = false;
+						break;
+					}
+					else
+					{
+						nextProgress = nextProgress.Add(SolvingBooleanSet.TrueOnly);
+						nextIndex++;
+					}
+				}
+				if (canAdd)
+				{
+					if (nextIndex < known.Length && known[nextIndex].Values != SolveBool.True)
+					{
+						nextProgress = nextProgress.Add(SolvingBooleanSet.FalseOnly);
+						nextIndex++;
+					}
+					GenerateIncludingKnownDataRec(known, nextGroupSizes, nextProgress, nextIndex, output);
+				}
+			}
+
+			// path 2: try adding an empty cell if possible
+			if (known[index].Values != SolveBool.True)
+			{
+				GenerateIncludingKnownDataRec(known, groupSizes, formerProgress.Add(SolvingBooleanSet.FalseOnly), index + 1, output);
+			}
+		}
+
+		private bool OutOfBounds(IEnumerable<int> groupSizes, int remainingLength)
+		{
+			// all of the groups plus at least one spacer between them should be less than the row length
 			return (groupSizes.Sum() + groupSizes.Count() - 1 > remainingLength);
 		}
 	}
