@@ -46,7 +46,7 @@ namespace UnitTests
 		}
 
 		[TestMethod]
-		public void TestConstrain()
+		public void Test_9_Constrain()
 		{
 			RowPossibilityGenerator gen = new RowPossibilityGenerator();
 			var c = new TestCase()
@@ -58,6 +58,53 @@ namespace UnitTests
 			var result = gen.Constrain(c.Groups, c.BooleanRow);
 			Assert.IsTrue(result[9].IsDefined);
 			Assert.IsTrue(result.SequenceEqual(c.TargetBooleanRow));
+		}
+
+		[TestMethod]
+		public void Constrain_3_5()
+		{
+			RowPossibilityGenerator gen = new RowPossibilityGenerator();
+			var c = new TestCase()
+			{
+				Row = "...1.",
+				Target = "0.11.",
+				Groups = new List<int>() { 3},
+			};
+			var result = gen.Constrain(c.Groups, c.BooleanRow);
+			Assert.IsTrue(result.SequenceEqual(c.TargetBooleanRow));
+		}
+
+		[TestMethod]
+		public void TestManyRowCases()
+		{
+			TestConstrainCase("...1.", "0.11.", 3);
+			TestConstrainCase("...1.", "00.1.", 2);
+			TestConstrainCase("..000", "11000", 2);
+			TestConstrainCase("1..0.", "11000", 2);
+			TestConstrainCase("..........", "...1111...", 7);
+			TestConstrainCase(".........1", ".1.0111111", 2, 6);
+			TestConstrainCase(".1..011111", ".1.0011111", 2, 5);
+			TestConstrainCase("....01....", ".11.010...", 3, 1, 1);
+			TestConstrainCase("....1.....", "..111.....", 5, 2);
+			TestConstrainCase("..011.....", "0001110...", 3, 1);
+			TestConstrainCase("1.0.0....1", "1100001111", 2, 4);
+
+
+
+			//TestConstrainCase("..........", "..........", 1);
+		}
+
+		private void TestConstrainCase(string row, string target, params int[] groups)
+		{
+			RowPossibilityGenerator gen = new RowPossibilityGenerator();
+			var c = new TestCase()
+			{
+				Row = row,
+				Target = target,
+				Groups = groups.ToList(),
+			};
+			var result = gen.Constrain(c.Groups, c.BooleanRow);
+			Assert.IsTrue(result.SequenceEqual(c.TargetBooleanRow), row + " -> " + target);
 		}
 
 		#region Test case classes
